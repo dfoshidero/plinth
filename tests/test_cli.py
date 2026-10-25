@@ -3,7 +3,8 @@ import sys
 
 import yaml
 
-from plinth.cli import main, save_answers
+from plinth.commands.project import save_answers
+from plinth.main import main
 from tests.conftest import EXAMPLES
 
 
@@ -33,8 +34,19 @@ def test_generate_writes_project_and_config(tmp_path, config_dict):
     path = _write_config(tmp_path, config_dict)
     out = tmp_path / "out"
     assert main(["generate", "--config", str(path), "--output", str(out), "--no-git"]) == 0
-    assert (out / "atlas" / "plinth.yaml").exists()
-    assert (out / "atlas" / "atlas-gitops").is_dir()
+    assert (out / "atlas" / "atlas-gitops" / "plinth.yaml").exists()
+    assert not (out / "atlas" / "plinth.yaml").exists()
+
+
+def test_generate_lists_what_to_set_up(tmp_path, config_dict, capsys):
+    config_dict["project"]["registry"] = "registry.example.com/acme"
+    path = _write_config(tmp_path, config_dict)
+    main(["generate", "--config", str(path), "--output", str(tmp_path / "out"), "--no-git"])
+    out = capsys.readouterr().out
+    assert "Next steps" in out
+    for name in ("GITOPS_TOKEN", "REGISTRY_USERNAME", "REGISTRY_PASSWORD"):
+        assert name in out
+    assert "https://github.com/acme/atlas-gitops.git" in out
 
 
 def test_generate_refuses_existing_target(tmp_path, config_dict):
@@ -72,6 +84,11 @@ def test_add_command(tmp_path, config_dict, capsys):
     code = main(["add", "service", "billing", "--project-dir", str(out / "atlas"), "--no-git"])
     assert code == 0
     assert "created" in capsys.readouterr().out
+
+
+def test_update_command_reports_errors(tmp_path, capsys):
+    assert main(["update", "--project-dir", str(tmp_path)]) == 2
+    assert "no plinth project" in capsys.readouterr().err
 
 
 def test_add_command_reports_errors(tmp_path, capsys):

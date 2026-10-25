@@ -1,20 +1,56 @@
 #!/usr/bin/env bash
 # Create a local k3d cluster, install Argo CD and point it at this repository.
 # Needs: docker, k3d, kubectl, helm. Push this repo and the app repos first.
+#
+# Optional, for private repositories and images:
+#   GIT_USERNAME, GIT_TOKEN              let Argo CD read repos under {{ project.git_base_url }}
+#   REGISTRY_USERNAME, REGISTRY_PASSWORD let the cluster pull images from {{ project.registry }}
 set -euo pipefail
 
 CLUSTER="${CLUSTER:-{{ project.name }}}"
 ARGO_CD_CHART_VERSION="{{ defaults.ARGO_CD_CHART_VERSION }}"
+NAMESPACES=({% for environment in config.environments %}{{ project.name }}-{{ environment }}{% if not loop.last %} {% endif %}{% endfor %})
 cd "$(dirname "$0")/.."
 
 for tool in docker k3d kubectl helm; do
   command -v "$tool" >/dev/null || { echo "missing required tool: $tool" >&2; exit 1; }
 done
 
+apply() { kubectl apply -f - >/dev/null; }
+
 k3d cluster list "$CLUSTER" >/dev/null 2>&1 || k3d cluster create "$CLUSTER" --wait
 helm repo add argo https://argoproj.github.io/argo-helm --force-update >/dev/null
 helm upgrade --install argocd argo/argo-cd --version "$ARGO_CD_CHART_VERSION" \
   --namespace argocd --create-namespace --wait
+
+if [[ -n "${GIT_TOKEN:-}" ]]; then
+  kubectl -n argocd create secret generic {{ defaults.REPO_CREDS_SECRET }} --type=Opaque \
+    --from-literal=type=git \
+    --from-literal=url={{ project.git_base_url }} \
+    --from-literal=username="${GIT_USERNAME:-git}" \
+    --from-literal=password="$GIT_TOKEN" \
+    --dry-run=client -o yaml | apply
+  kubectl -n argocd label secret {{ defaults.REPO_CREDS_SECRET }} \
+    argocd.argoproj.io/secret-type=repo-creds --overwrite >/dev/null
+  echo "Argo CD can read repositories under {{ project.git_base_url }}"
+else
+  echo "GIT_TOKEN not set: Argo CD can only read public repositories"
+fi
+
+for ns in "${NAMESPACES[@]}"; do
+  kubectl create namespace "$ns" --dry-run=client -o yaml | apply
+  if [[ -n "${REGISTRY_PASSWORD:-}" ]]; then
+    kubectl -n "$ns" create secret docker-registry {{ defaults.IMAGE_PULL_SECRET }} \
+      --docker-server={{ project.registry.split("/")[0] }} \
+      --docker-username="${REGISTRY_USERNAME:?set REGISTRY_USERNAME too}" \
+      --docker-password="$REGISTRY_PASSWORD" \
+      --dry-run=client -o yaml | apply
+  fi
+done
+if [[ -z "${REGISTRY_PASSWORD:-}" ]]; then
+  echo "REGISTRY_PASSWORD not set: the cluster can only pull public images"
+fi
+
 kubectl apply -n argocd -f bootstrap/root.yaml
 
 echo "Argo CD is running. Initial admin password:"

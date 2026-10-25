@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Literal
 
-from plinth.schema import AppKind, Layout, ProjectConfig
+from plinth.model.schema import AppKind, Layout, ProjectConfig
 
 RepoRole = Literal["app", "gitops"]
 
@@ -28,6 +28,10 @@ class RepoPlan:
     role: RepoRole
     url: str
     workloads: tuple[WorkloadPlan, ...]
+
+    @property
+    def web_url(self) -> str:
+        return self.url.removesuffix(".git")
 
 
 @dataclass(frozen=True)

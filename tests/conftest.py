@@ -5,9 +5,9 @@ from pathlib import Path
 
 import pytest
 
-from plinth.loader import load_config
-from plinth.plan import build_plan
-from plinth.render import render_plan
+from plinth.model.loader import load_config
+from plinth.model.plan import build_plan
+from plinth.output.render import render_plan
 
 ROOT = Path(__file__).resolve().parent.parent
 EXAMPLES = sorted((ROOT / "examples").glob("*/plinth.yaml"))
@@ -46,3 +46,17 @@ def rendered(example):
     """(plan, files) for one example, rendered in memory."""
     plan = build_plan(load_config(example))
     return plan, render_plan(plan)
+
+
+@pytest.fixture
+def git_identity(monkeypatch):
+    """A git identity for commits made in tests, independent of the user's config."""
+    for key, value in {
+        "GIT_AUTHOR_NAME": "t",
+        "GIT_AUTHOR_EMAIL": "t@example.com",
+        "GIT_COMMITTER_NAME": "t",
+        "GIT_COMMITTER_EMAIL": "t@example.com",
+        "GIT_CONFIG_GLOBAL": "/dev/null",
+        "GIT_CONFIG_NOSYSTEM": "1",
+    }.items():
+        monkeypatch.setenv(key, value)

@@ -3,7 +3,7 @@ import subprocess
 
 import pytest
 
-from plinth.write import OutputExistsError, init_repo, write_project, write_tree
+from plinth.output.write import OutputExistsError, init_repo, write_project, write_tree
 
 
 def test_write_project_creates_files(tmp_path):
@@ -25,7 +25,7 @@ def test_failed_write_leaves_nothing_behind(tmp_path, monkeypatch):
         (root / "partial.txt").write_text("half")
         raise RuntimeError("disk full")
 
-    monkeypatch.setattr("plinth.write.write_tree", boom)
+    monkeypatch.setattr("plinth.output.write.write_tree", boom)
     with pytest.raises(RuntimeError):
         write_project(tmp_path / "proj", {"x.txt": b"x"}, {}, init_git=False)
     assert list(tmp_path.iterdir()) == []
@@ -56,3 +56,4 @@ def test_init_repo_commits_and_sets_remote(tmp_path, monkeypatch):
     assert git("rev-list", "--count", "HEAD").strip() == "1"
     assert git("remote", "get-url", "origin").strip() == "https://example.com/acme/repo.git"
     assert git("status", "--porcelain") == ""
+    assert git("rev-parse", "plinth") == git("rev-parse", "HEAD")

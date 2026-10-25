@@ -1,12 +1,29 @@
-"""Interactive questions for `plinth project`. Produces a config dict only."""
+"""`plinth project`: ask questions, then generate the project from the answers."""
 
 from __future__ import annotations
 
+import argparse
+import sys
+from pathlib import Path
+
 import questionary
+import yaml
 from questionary import Choice
 
 from plinth import config as defaults
-from plinth.schema import NAME_RE, AppKind, Architecture, GitProvider, Layout
+from plinth.commands.generate import summary, write_and_report
+from plinth.model.loader import ConfigError, parse_config
+from plinth.model.plan import build_plan
+from plinth.model.schema import (
+    NAME_RE,
+    AppKind,
+    Architecture,
+    GitProvider,
+    Layout,
+    validate_git_base_url,
+    validate_registry,
+)
+from plinth.output.render import render_plan
 
 
 def _name_ok(value: str) -> bool | str:
@@ -15,6 +32,26 @@ def _name_ok(value: str) -> bool | str:
     return (
         f"lowercase kebab-case, {defaults.NAME_MIN_LEN}-{defaults.NAME_MAX_LEN} chars, e.g. atlas"
     )
+
+
+def _check(validator):
+    """Adapt a schema validator to questionary: True, or the error message."""
+
+    def check(value: str) -> bool | str:
+        try:
+            validator(value)
+        except ValueError as exc:
+            return str(exc)
+        return True
+
+    return check
+
+
+def _suggest_registry(provider: str, git_base_url: str) -> str:
+    """ghcr.io/<owner> for GitHub, registry.gitlab.com/<group> for GitLab."""
+    host = defaults.BUILTIN_REGISTRY.get(provider)
+    path = git_base_url.split("://", 1)[-1].split("/", 1)[-1].lower()
+    return f"{host}/{path}" if host and path else defaults.DEFAULT_REGISTRY
 
 
 def _port_ok(value: str) -> bool | str:
@@ -102,10 +139,13 @@ def run_wizard() -> dict:
     git_base_url = questionary.text(
         "Git base URL the repos will live under (https://host/org):",
         default=defaults.DEFAULT_GIT_BASE_URL[provider],
+        validate=_check(validate_git_base_url),
     ).unsafe_ask()
 
     registry = questionary.text(
-        "Container registry (host/path, no scheme):", default=defaults.DEFAULT_REGISTRY
+        "Container registry (lowercase host/path, no scheme):",
+        default=_suggest_registry(provider, git_base_url),
+        validate=_check(validate_registry),
     ).unsafe_ask()
 
     applications = _ask_applications(architecture)
@@ -127,3 +167,46 @@ def run_wizard() -> dict:
         "applications": applications,
         "environments": [e.strip() for e in envs.split(",") if e.strip()],
     }
+
+
+def save_answers(directory: Path, text: str) -> Path:
+    """Save wizard answers without overwriting anything already there."""
+    stem, suffix = Path(defaults.CONFIG_FILENAME).stem, Path(defaults.CONFIG_FILENAME).suffix
+    for n in range(1000):
+        path = directory / (f"{stem}{suffix}" if n == 0 else f"{stem}-{n}{suffix}")
+        try:
+            with path.open("x", encoding="utf-8") as fh:
+                fh.write(text)
+            return path
+        except FileExistsError:
+            continue
+    raise OSError(f"could not find a free file name for answers in {directory}")
+
+
+def run(args: argparse.Namespace) -> int:
+    try:
+        answers = run_wizard()
+    except KeyboardInterrupt:
+        print("\naborted, nothing written", file=sys.stderr)
+        return 130
+
+    try:
+        config = parse_config(answers, source="your answers")
+    except ConfigError as exc:
+        saved = save_answers(Path.cwd(), yaml.safe_dump(answers, sort_keys=False))
+        print(f"error: {exc}", file=sys.stderr)
+        print(
+            f"answers saved to {saved}; edit it and run: "
+            f"plinth generate --config {saved.name} --output {args.output}",
+            file=sys.stderr,
+        )
+        return 2
+
+    plan = build_plan(config)
+    target = args.output / config.project.name
+    print(f"\nWill create under {target.resolve()}:")
+    print("\n".join(summary(plan, render_plan(plan))))
+    if not questionary.confirm("Generate now?", default=True).unsafe_ask():
+        print("nothing written")
+        return 0
+    return write_and_report(plan, target, init_git=not args.no_git)

@@ -8,7 +8,8 @@ import subprocess
 import tempfile
 from pathlib import Path
 
-from plinth.render import FileMap, is_executable
+from plinth import config as defaults
+from plinth.output.render import FileMap, is_executable
 
 INITIAL_COMMIT_MESSAGE = "chore: initial commit"
 
@@ -58,15 +59,21 @@ def init_repos(root: Path, repo_urls: dict[str, str]) -> list[str]:
     return warnings
 
 
+def git(path: Path, *args: str) -> subprocess.CompletedProcess:
+    return subprocess.run(["git", *args], cwd=path, capture_output=True, text=True, check=False)
+
+
 def init_repo(path: Path, url: str) -> str | None:
-    def git(*args: str) -> subprocess.CompletedProcess:
-        return subprocess.run(["git", *args], cwd=path, capture_output=True, text=True, check=False)
+    """git init, first commit, and the template branch `plinth update` merges from."""
 
     for args in (("init", "-q", "-b", "main"), ("remote", "add", "origin", url), ("add", "-A")):
-        result = git(*args)
+        result = git(path, *args)
         if result.returncode != 0:
             return f"{path.name}: git {args[0]} failed: {result.stderr.strip()}"
-    result = git("commit", "-q", "-m", INITIAL_COMMIT_MESSAGE)
+    result = git(path, "commit", "-q", "-m", INITIAL_COMMIT_MESSAGE)
     if result.returncode != 0:
         return f"{path.name}: initialised but not committed: {result.stderr.strip()}"
+    result = git(path, "branch", defaults.TEMPLATE_BRANCH)
+    if result.returncode != 0:
+        return f"{path.name}: no {defaults.TEMPLATE_BRANCH} branch: {result.stderr.strip()}"
     return None

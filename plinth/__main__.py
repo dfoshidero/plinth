@@ -1,5 +1,5 @@
 import sys
 
-from plinth.cli import main
+from plinth.main import main
 
 sys.exit(main())

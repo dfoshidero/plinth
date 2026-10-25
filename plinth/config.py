@@ -30,7 +30,8 @@ RELEASE_ENVIRONMENT = "dev"  # CI releases here; other environments are promoted
 REPLICAS = {"dev": 1, "production": 2}
 DEFAULT_REPLICAS = 1
 
-# wizard defaults
+# wizard defaults; the placeholder must be replaced before a config validates
+PLACEHOLDER = "YOUR_"
 DEFAULT_REGISTRY = "ghcr.io/YOUR_ACCOUNT"
 DEFAULT_GIT_BASE_URL = {
     "github": "https://github.com/YOUR_ACCOUNT",
@@ -41,11 +42,21 @@ DEFAULT_GIT_BASE_URL = {
 # user name paired with a token for HTTPS git pushes from CI
 GIT_TOKEN_USER = {"github": "x-access-token", "gitlab": "oauth2", "generic": "git"}
 
+# registries whose CI login is built in (no registry secrets needed)
+BUILTIN_REGISTRY = {"github": "ghcr.io", "gitlab": "registry.gitlab.com"}
+
+# cluster secrets that scripts/bootstrap-local.sh creates when credentials are given
+IMAGE_PULL_SECRET = "registry-credentials"
+REPO_CREDS_SECRET = "plinth-repo-creds"
+
+# branch in every generated repo holding plinth's untouched output; `plinth update` merges it
+TEMPLATE_BRANCH = "plinth"
+RELEASE_PUSH_ATTEMPTS = 5
+
 # pinned tool versions
-PYTHON_IMAGE = "python:3.12-slim"
-GIT_IMAGE = "alpine:3.22"
-DOCKER_IMAGE = "docker:28"
-DAGGER_VERSION = "0.21.11"
-DAGGER_GITHUB_ACTION = "dagger/dagger-for-github@v8"
-CHECKOUT_ACTION = "actions/checkout@v5"
-ARGO_CD_CHART_VERSION = "10.10.5"  # ships Argo CD 3.5.6
+PYTHON_VERSION = "3.14"
+PYTHON_IMAGE = f"python:{PYTHON_VERSION}-slim"
+DOCKER_IMAGE = "docker:29"
+CHECKOUT_ACTION = "actions/checkout@v7"
+SETUP_PYTHON_ACTION = "actions/setup-python@v7"
+ARGO_CD_CHART_VERSION = "10.11.1"  # ships Argo CD 3.5.6

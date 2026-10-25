@@ -2,8 +2,8 @@ from collections import deque
 
 import pytest
 
-from plinth import wizard
-from plinth.loader import parse_config
+from plinth.commands import project as wizard
+from plinth.model.loader import parse_config
 
 
 class _Prompt:

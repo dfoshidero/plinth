@@ -10,9 +10,11 @@ import yaml
 from jinja2 import Environment, FileSystemLoader, StrictUndefined
 
 from plinth import config as defaults
-from plinth.plan import Plan, RepoPlan
+from plinth.model.loader import dump_config
+from plinth.model.plan import Plan, RepoPlan
+from plinth.output import checklist
 
-BLUEPRINTS_DIR = Path(__file__).resolve().parent / "blueprints"
+BLUEPRINTS_DIR = Path(__file__).resolve().parent.parent / "blueprints"
 TEMPLATE_SUFFIX = ".j2"
 DOT_PREFIX = "dot-"  # blueprint "dot-gitignore" renders as ".gitignore"
 EXECUTABLE_SUFFIXES = (".sh",)
@@ -81,6 +83,9 @@ def render_plan(plan: Plan, blueprints_root: Path = BLUEPRINTS_DIR) -> FileMap:
         "plan": plan,
         "defaults": defaults,
         "git_token_user": defaults.GIT_TOKEN_USER[project.git_provider.value],
+        "ci_settings": checklist.ci_settings(plan),
+        "ci_settings_location": checklist.SETTINGS_LOCATION[project.git_provider],
+        "registry_note": checklist.registry_note(plan),
     }
     files: FileMap = {}
 
@@ -91,9 +96,8 @@ def render_plan(plan: Plan, blueprints_root: Path = BLUEPRINTS_DIR) -> FileMap:
         files[root + defaults.REPO_METADATA_FILENAME] = _metadata(repo, plan)
 
         if repo.role == "app":
-            files.update(
-                render_tree(env, blueprints_root, f"ci/{project.git_provider.value}", ctx, root)
-            )
+            for blueprint in ("common", project.git_provider.value):
+                files.update(render_tree(env, blueprints_root, f"ci/{blueprint}", ctx, root))
             for wl in repo.workloads:
                 wctx = {**ctx, "workload": wl}
                 for blueprint in ("workload/common", f"workload/{wl.kind.value}"):
@@ -101,6 +105,7 @@ def render_plan(plan: Plan, blueprints_root: Path = BLUEPRINTS_DIR) -> FileMap:
                         render_tree(env, blueprints_root, blueprint, wctx, root + wl.source_dir)
                     )
         else:
+            files[root + defaults.CONFIG_FILENAME] = dump_config(plan.config).encode("utf-8")
             for environment in plan.config.environments:
                 ectx = {**ctx, "environment": environment}
                 files[f"{root}apps/{environment}.yaml"] = _render_one(
@@ -113,6 +118,11 @@ def render_plan(plan: Plan, blueprints_root: Path = BLUEPRINTS_DIR) -> FileMap:
                     )
 
     return files
+
+
+def config_path(plan: Plan) -> str:
+    """Where the project's config lives in the rendered output."""
+    return f"{plan.gitops.folder}/{defaults.CONFIG_FILENAME}"
 
 
 def is_executable(rel: str) -> bool:

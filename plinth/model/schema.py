@@ -10,7 +10,37 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 from plinth import config as defaults
 
 NAME_RE = re.compile(r"^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$")
-GIT_BASE_URL_RE = re.compile(r"^https://[^\s/]+(?:/[^\s/]+)+$")
+# https://host[:port]/org[/subgroup...]; no quotes, spaces or template characters
+GIT_BASE_URL_RE = re.compile(r"^https://[A-Za-z0-9.-]+(?::[0-9]+)?(?:/[A-Za-z0-9._~-]+)+$")
+# host[:port][/path] as Docker image references allow it: lowercase only
+REGISTRY_RE = re.compile(
+    r"^[a-z0-9]+(?:[.-][a-z0-9]+)*(?::[0-9]+)?(?:/[a-z0-9]+(?:(?:[._]|__|-+)[a-z0-9]+)*)*$"
+)
+
+
+def _reject_placeholder(value: str, what: str) -> None:
+    if defaults.PLACEHOLDER in value:
+        raise ValueError(f"{what} still contains the placeholder '{defaults.PLACEHOLDER}...'")
+
+
+def validate_registry(value: str) -> str:
+    _reject_placeholder(value, "registry")
+    if not REGISTRY_RE.fullmatch(value):
+        raise ValueError(
+            "registry must be lowercase host[/path] without scheme or trailing slash, "
+            "e.g. ghcr.io/acme"
+        )
+    return value
+
+
+def validate_git_base_url(value: str) -> str:
+    _reject_placeholder(value, "gitBaseUrl")
+    if not GIT_BASE_URL_RE.fullmatch(value):
+        raise ValueError(
+            "gitBaseUrl must look like https://host/org (no trailing slash), "
+            "e.g. https://github.com/acme"
+        )
+    return value
 
 
 def validate_name(value: str, what: str) -> str:
@@ -69,19 +99,12 @@ class ProjectSpec(StrictModel):
     @field_validator("registry")
     @classmethod
     def _registry(cls, v: str) -> str:
-        if "://" in v or v.endswith("/") or not v:
-            raise ValueError("registry must be host[/path] without scheme or trailing slash")
-        return v
+        return validate_registry(v)
 
     @field_validator("git_base_url")
     @classmethod
     def _git_base_url(cls, v: str) -> str:
-        if not GIT_BASE_URL_RE.fullmatch(v):
-            raise ValueError(
-                "gitBaseUrl must look like https://host/org (no trailing slash), "
-                "e.g. https://github.com/acme"
-            )
-        return v
+        return validate_git_base_url(v)
 
 
 class ApplicationSpec(StrictModel):

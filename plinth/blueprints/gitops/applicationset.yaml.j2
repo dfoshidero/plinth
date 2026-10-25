@@ -15,6 +15,9 @@ spec:
   template:
     metadata:
       name: '{{ project.name }}-{% raw %}{{ .workload }}{% endraw %}-{{ environment }}'
+      # deleting a release.yaml removes the Application and everything it deployed
+      finalizers:
+        - resources-finalizer.argocd.argoproj.io
     spec:
       project: {{ project.name }}
       destination:
@@ -26,6 +29,8 @@ spec:
           path: charts/workload
           helm:
             releaseName: '{% raw %}{{ .workload }}{% endraw %}'
+            # a workload added without per-environment values still deploys
+            ignoreMissingValueFiles: true
             valueFiles:
               - '$app/{% raw %}{{ .scorePath }}{% endraw %}'
               - '$gitops/environments/{{ environment }}/{% raw %}{{ .workload }}{% endraw %}/values.yaml'
@@ -40,7 +45,7 @@ spec:
           ref: gitops
       syncPolicy:
         automated:
-          prune: false
+          prune: true
           selfHeal: true
         syncOptions:
           - CreateNamespace=true

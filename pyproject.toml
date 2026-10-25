@@ -7,7 +7,7 @@ license = "MIT"
 license-files = ["LICENSE"]
 authors = [{ name = "dfoshidero" }]
 requires-python = ">=3.12"
-keywords = ["scaffolding", "generator", "gitops", "argo-cd", "dagger", "score", "monorepo"]
+keywords = ["scaffolding", "generator", "gitops", "argo-cd", "score", "monorepo"]
 classifiers = [
 	"Development Status :: 3 - Alpha",
 	"Environment :: Console",
@@ -15,6 +15,7 @@ classifiers = [
 	"Programming Language :: Python :: 3",
 	"Programming Language :: Python :: 3.12",
 	"Programming Language :: Python :: 3.13",
+	"Programming Language :: Python :: 3.14",
 	"Topic :: Software Development :: Code Generators",
 ]
 dependencies = [
@@ -29,7 +30,7 @@ Homepage = "https://github.com/dfoshidero/plinth"
 Issues = "https://github.com/dfoshidero/plinth/issues"
 
 [project.scripts]
-plinth = "plinth.cli:main"
+plinth = "plinth.main:main"
 
 [dependency-groups]
 dev = [

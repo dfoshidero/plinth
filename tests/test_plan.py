@@ -1,7 +1,7 @@
 import pytest
 
-from plinth.loader import parse_config
-from plinth.plan import build_plan
+from plinth.model.loader import parse_config
+from plinth.model.plan import build_plan
 
 
 @pytest.fixture
