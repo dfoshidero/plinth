@@ -1,6 +1,6 @@
 [project]
 name = "plinth-cli"
-version = "0.2.0"
+version = "0.3.0"
 description = "Generates local, ready-to-push application and GitOps repositories from one config."
 readme = "README.md"
 license = "MIT"
