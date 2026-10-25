@@ -1,0 +1,13 @@
+project:
+  name: atlas
+  architecture: modular-monolith
+  layout: split-repo
+  gitProvider: github
+  registry: registry.example.com/team
+applications:
+  - {name: api, kind: modular-monolith}
+ci:
+  engine: dagger
+cd:
+  controller: argocd
+  environments: [dev, production]

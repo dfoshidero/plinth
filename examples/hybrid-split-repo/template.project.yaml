@@ -1,0 +1,15 @@
+project:
+  name: atlas
+  architecture: hybrid
+  layout: split-repo
+  gitProvider: github
+  registry: registry.example.com/team
+applications:
+  - {name: api, kind: modular-monolith}
+  - {name: worker, kind: worker}
+  - {name: notifier, kind: service}
+ci:
+  engine: dagger
+cd:
+  controller: argocd
+  environments: [dev, production]
