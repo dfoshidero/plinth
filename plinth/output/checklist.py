@@ -106,8 +106,8 @@ def next_steps(plan: Plan, root: Path, repos: list[RepoPlan], git_ready: bool) -
     app_repos = [r for r in repos if r.role == "app"]
     if app_repos:
         names = ", ".join(r.folder for r in app_repos)
-        lines.append(f"{n}. CI settings for {names}")
-        lines.append(f"   ({SETTINGS_LOCATION[provider]}):")
+        lines.append(f"{n}. Set these CI settings in {names}")
+        lines.append(f"   ({SETTINGS_LOCATION[provider]}); CI cannot release without them:")
         rows = [(s.kind, s.name, s.purpose) for s in ci_settings(plan)]
         lines += ["     " + row for row in _pad(rows)]
         note = registry_note(plan)
