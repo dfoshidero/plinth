@@ -1,0 +1,12 @@
+project:
+  name: atlas
+  architecture: microservices
+  layout: split-repo
+  gitProvider: github
+  gitBaseUrl: https://github.com/acme
+  registry: ghcr.io/acme
+applications:
+  - {name: api, kind: service}
+  - {name: worker, kind: worker}
+  - {name: notifier, kind: service, port: 8081}
+environments: [dev, production]

@@ -1,0 +1,20 @@
+{{- with .Values.service }}
+{{- with .ports }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "workload.name" $ }}
+  labels:
+    {{- include "workload.labels" $ | nindent 4 }}
+spec:
+  selector:
+    {{- include "workload.selector" $ | nindent 4 }}
+  ports:
+    {{- range $name, $port := . }}
+    - name: {{ $name }}
+      port: {{ $port.port }}
+      targetPort: {{ $port.targetPort | default $port.port }}
+      protocol: {{ $port.protocol | default "TCP" }}
+    {{- end }}
+{{- end }}
+{{- end }}

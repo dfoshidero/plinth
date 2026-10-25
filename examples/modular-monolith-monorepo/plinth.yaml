@@ -1,0 +1,10 @@
+project:
+  name: atlas
+  architecture: modular-monolith
+  layout: monorepo
+  gitProvider: github
+  gitBaseUrl: https://github.com/acme
+  registry: ghcr.io/acme
+applications:
+  - {name: api, kind: modular-monolith}
+environments: [dev, production]

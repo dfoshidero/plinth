@@ -1,0 +1,46 @@
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: {{ project.name }}-{{ environment }}
+  namespace: argocd
+spec:
+  goTemplate: true
+  goTemplateOptions: ["missingkey=error"]
+  generators:
+    - git:
+        repoURL: {{ repo.url }}
+        revision: HEAD
+        files:
+          - path: environments/{{ environment }}/*/release.yaml
+  template:
+    metadata:
+      name: '{{ project.name }}-{% raw %}{{ .workload }}{% endraw %}-{{ environment }}'
+    spec:
+      project: {{ project.name }}
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: {{ project.name }}-{{ environment }}
+      sources:
+        - repoURL: {{ repo.url }}
+          targetRevision: HEAD
+          path: charts/workload
+          helm:
+            releaseName: '{% raw %}{{ .workload }}{% endraw %}'
+            valueFiles:
+              - '$app/{% raw %}{{ .scorePath }}{% endraw %}'
+              - '$gitops/environments/{{ environment }}/{% raw %}{{ .workload }}{% endraw %}/values.yaml'
+            parameters:
+              - name: image
+                value: '{% raw %}{{ .image }}{% endraw %}'
+        - repoURL: '{% raw %}{{ .appRepoURL }}{% endraw %}'
+          targetRevision: '{% raw %}{{ .revision }}{% endraw %}'
+          ref: app
+        - repoURL: {{ repo.url }}
+          targetRevision: HEAD
+          ref: gitops
+      syncPolicy:
+        automated:
+          prune: false
+          selfHeal: true
+        syncOptions:
+          - CreateNamespace=true

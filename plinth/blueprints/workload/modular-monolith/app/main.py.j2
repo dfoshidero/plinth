@@ -1,0 +1,63 @@
+"""HTTP entry point for {{ workload.name }}, a modular monolith.
+
+Feature code lives in app/modules/. Each module exposes ROUTES; this file only
+wires them into one process. Standard library only; swap in a framework when you need one.
+"""
+
+from __future__ import annotations
+
+import json
+import logging
+import os
+import signal
+import threading
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+from app.modules import ROUTES
+
+APP_NAME = os.environ.get("APP_NAME", "{{ workload.name }}")
+HEALTH_PATH = "{{ defaults.HEALTH_PATH }}"
+
+log = logging.getLogger(APP_NAME)
+
+
+def handle(path: str) -> tuple[int, dict]:
+    if path == HEALTH_PATH:
+        return 200, {"status": "ok"}
+    if path == "/":
+        return 200, {"service": APP_NAME, "modules": sorted({p.split("/")[1] for p in ROUTES})}
+    route = ROUTES.get(path)
+    if route is not None:
+        return route()
+    return 404, {"error": "not found"}
+
+
+class Handler(BaseHTTPRequestHandler):
+    def do_GET(self) -> None:
+        status, body = handle(self.path.split("?", 1)[0])
+        payload = json.dumps(body).encode("utf-8")
+        self.send_response(status)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(payload)))
+        self.end_headers()
+        self.wfile.write(payload)
+
+    def log_message(self, format: str, *args) -> None:
+        log.info("%s %s", self.address_string(), format % args)
+
+
+def make_server(port: int) -> ThreadingHTTPServer:
+    return ThreadingHTTPServer(("0.0.0.0", port), Handler)
+
+
+def main() -> None:
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
+    server = make_server(int(os.environ.get("PORT", "{{ workload.port }}")))
+    signal.signal(signal.SIGTERM, lambda *_: threading.Thread(target=server.shutdown).start())
+    log.info("listening on port %s", server.server_address[1])
+    server.serve_forever()
+    server.server_close()
+
+
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,25 @@
+name: human-contributions
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  check-commits:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - name: Reject AI co-author trailers and generated-by notes
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          pattern='co-authored-by:.*(claude|anthropic|copilot|openai|chatgpt|gpt-|cursor|gemini|codeium|devin|aider)|generated (with|by) .*(claude|copilot|chatgpt|cursor|ai)'
+          if git log --format='%H%n%B' "$BASE..$HEAD" | grep -iE "$pattern"; then
+            echo "::error::This pull request contains AI attribution. See CONTRIBUTING.md: contributions must be written by humans."
+            exit 1
+          fi
