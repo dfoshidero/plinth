@@ -83,7 +83,9 @@ require_env() {
 # revision currently released for a workload, empty if none
 released_revision() {
   file="$1/environments/$RELEASE_ENVIRONMENT/$2/release.yaml"
-  [ -f "$file" ] && sed -n 's/^revision: *//p' "$file" | tr -d "\"' " || true
+  if [ -f "$file" ]; then
+    sed -n 's/^revision: *//p' "$file" | tr -d "\"' "
+  fi
 }
 
 # true if the recorded release already contains COMMIT (same or newer), so shipping
