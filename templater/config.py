@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from enum import StrEnum
 
-from pydantic import BaseModel, ConfigDict, Field, field_validadtor, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 NAME_RE = re.compile(r"^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$")
 MAX_NAME_LEN = 30
