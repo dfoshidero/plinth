@@ -9,8 +9,8 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from plinth import config as defaults
-from plinth.plan import Plan, RepoPlan
-from plinth.schema import GitProvider
+from plinth.model.plan import Plan, RepoPlan
+from plinth.model.schema import GitProvider
 
 SETTINGS_LOCATION = {
     GitProvider.GITHUB: "Settings > Secrets and variables > Actions",

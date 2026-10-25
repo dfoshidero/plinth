@@ -11,10 +11,10 @@ import sys
 import pytest
 import yaml
 
-from plinth.loader import parse_config
-from plinth.plan import build_plan
-from plinth.render import render_plan
-from plinth.write import write_tree
+from plinth.model.loader import parse_config
+from plinth.model.plan import build_plan
+from plinth.output.render import render_plan
+from plinth.output.write import write_tree
 
 SCORE_NAME_RE = r"^[a-z0-9][a-z0-9-]{0,61}[a-z0-9]$"
 
@@ -24,7 +24,7 @@ def _is_helm_template(rel: str) -> bool:
 
 
 def test_rendering_is_deterministic(example):
-    from plinth.loader import load_config
+    from plinth.model.loader import load_config
 
     plan = build_plan(load_config(example))
     assert render_plan(plan) == render_plan(plan)

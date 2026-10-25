@@ -10,10 +10,10 @@ import sys
 import pytest
 import yaml
 
-from plinth.loader import parse_config
-from plinth.plan import build_plan
-from plinth.render import render_plan
-from plinth.write import write_tree
+from plinth.model.loader import parse_config
+from plinth.model.plan import build_plan
+from plinth.output.render import render_plan
+from plinth.output.write import write_tree
 
 pytestmark = pytest.mark.skipif(shutil.which("git") is None, reason="git not installed")
 
@@ -124,6 +124,7 @@ def shipping(generated, tmp_path_factory):
         out = run(root, "git", "--git-dir", str(remote), "show", f"main:{path}", check=False)
         return yaml.safe_load(out.stdout) if out.returncode == 0 else None
 
+    ship.app = app
     return plan, ship, released, first, second, remote
 
 
@@ -162,3 +163,19 @@ def test_ship_fails_fast_without_settings(shipping):
     assert result.returncode != 0
     assert "GITOPS_TOKEN" in result.stderr
     assert released("api") is None
+
+
+@pytest.mark.parametrize("lead", ["0", "4", "7", "a"])
+def test_any_commit_hash_is_read_back_correctly(shipping, lead):
+    """A hash's first character once got eaten when reading release.yaml."""
+    plan, ship, released, first, _, _ = shipping
+    for n in range(500):
+        run(ship.app, "git", "commit", "-q", "--allow-empty", "-m", f"try {n}")
+        head = run(ship.app, "git", "rev-parse", "HEAD").stdout.strip()
+        if head.startswith(lead):
+            break
+    else:
+        pytest.skip(f"no hash starting with {lead}")
+    ship(head)
+    assert "skip" in ship(first).stdout
+    assert released(plan.app_repos[0].workloads[0].name)["revision"] == head

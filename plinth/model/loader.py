@@ -8,7 +8,7 @@ from typing import Any
 import yaml
 from pydantic import ValidationError
 
-from plinth.schema import ProjectConfig
+from plinth.model.schema import ProjectConfig
 
 
 class ConfigError(Exception):

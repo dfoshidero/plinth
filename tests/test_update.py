@@ -3,11 +3,11 @@ import subprocess
 
 import pytest
 
-from plinth.loader import parse_config
-from plinth.plan import build_plan
-from plinth.render import BLUEPRINTS_DIR, render_plan
-from plinth.update import update_project
-from plinth.write import write_project
+from plinth.commands.update import update_project
+from plinth.model.loader import parse_config
+from plinth.model.plan import build_plan
+from plinth.output.render import BLUEPRINTS_DIR, render_plan
+from plinth.output.write import write_project
 
 pytestmark = pytest.mark.skipif(shutil.which("git") is None, reason="git not installed")
 

@@ -3,7 +3,8 @@ import sys
 
 import yaml
 
-from plinth.cli import main, save_answers
+from plinth.commands.project import save_answers
+from plinth.main import main
 from tests.conftest import EXAMPLES
 
 

@@ -7,17 +7,19 @@ into the checked-out one. Git keeps the user's own changes and marks real confli
 
 from __future__ import annotations
 
+import argparse
 import shutil
+import sys
 import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 
 from plinth import config as defaults
-from plinth.loader import ConfigError
-from plinth.plan import RepoPlan, build_plan
-from plinth.render import BLUEPRINTS_DIR, GENERATOR_VERSION, FileMap, render_plan
-from plinth.workspace import find_workspace, load_project_config
-from plinth.write import INITIAL_COMMIT_MESSAGE, git, write_tree
+from plinth.model.loader import ConfigError
+from plinth.model.plan import RepoPlan, build_plan
+from plinth.model.workspace import find_workspace, load_project_config
+from plinth.output.render import BLUEPRINTS_DIR, GENERATOR_VERSION, FileMap, render_plan
+from plinth.output.write import INITIAL_COMMIT_MESSAGE, git, write_tree
 
 BRANCH = defaults.TEMPLATE_BRANCH
 
@@ -131,3 +133,27 @@ def _update_repo(path: Path, repo: RepoPlan, files: FileMap) -> RepoUpdate:
         return RepoUpdate(repo.folder, "merged")
     conflicts = _out(path, "diff", "--name-only", "--diff-filter=U").splitlines()
     return RepoUpdate(repo.folder, "conflicts", conflicts=conflicts)
+
+
+def run(args: argparse.Namespace) -> int:
+    try:
+        result = update_project(args.project_dir)
+    except ConfigError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    for note in result.notes:
+        print(f"note: {note}")
+    width = max(len(r.folder) for r in result.repos)
+    for repo in result.repos:
+        detail = f": {repo.detail}" if repo.detail else ""
+        print(f"  {repo.folder:<{width}}  {repo.status}{detail}")
+        for path in repo.conflicts:
+            print(f"  {'':<{width}}    conflict: {path}")
+    if any(r.status == "conflicts" for r in result.repos):
+        print(
+            "\nresolve the conflicts in those repositories, then `git commit` to finish the merge"
+        )
+        return 1
+    if any(r.status == "merged" for r in result.repos):
+        print(f"\nreview the merges, then push each repository: git push origin HEAD {BRANCH}")
+    return 1 if any(r.status == "skipped" for r in result.repos) else 0

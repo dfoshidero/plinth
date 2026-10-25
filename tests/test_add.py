@@ -1,12 +1,12 @@
 import pytest
 
 from plinth import config as defaults
-from plinth.add import add_application
-from plinth.loader import ConfigError, load_config, parse_config
-from plinth.plan import build_plan
-from plinth.render import render_plan
-from plinth.schema import AppKind, Architecture
-from plinth.write import write_project
+from plinth.commands.add import add_application
+from plinth.model.loader import ConfigError, load_config, parse_config
+from plinth.model.plan import build_plan
+from plinth.model.schema import AppKind, Architecture
+from plinth.output.render import render_plan
+from plinth.output.write import write_project
 
 
 @pytest.fixture

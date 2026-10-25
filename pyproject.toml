@@ -29,7 +29,7 @@ Homepage = "https://github.com/dfoshidero/plinth"
 Issues = "https://github.com/dfoshidero/plinth/issues"
 
 [project.scripts]
-plinth = "plinth.cli:main"
+plinth = "plinth.main:main"
 
 [dependency-groups]
 dev = [

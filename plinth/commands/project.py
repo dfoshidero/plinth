@@ -1,12 +1,20 @@
-"""Interactive questions for `plinth project`. Produces a config dict only."""
+"""`plinth project`: ask questions, then generate the project from the answers."""
 
 from __future__ import annotations
 
+import argparse
+import sys
+from pathlib import Path
+
 import questionary
+import yaml
 from questionary import Choice
 
 from plinth import config as defaults
-from plinth.schema import (
+from plinth.commands.generate import summary, write_and_report
+from plinth.model.loader import ConfigError, parse_config
+from plinth.model.plan import build_plan
+from plinth.model.schema import (
     NAME_RE,
     AppKind,
     Architecture,
@@ -15,6 +23,7 @@ from plinth.schema import (
     validate_git_base_url,
     validate_registry,
 )
+from plinth.output.render import render_plan
 
 
 def _name_ok(value: str) -> bool | str:
@@ -158,3 +167,46 @@ def run_wizard() -> dict:
         "applications": applications,
         "environments": [e.strip() for e in envs.split(",") if e.strip()],
     }
+
+
+def save_answers(directory: Path, text: str) -> Path:
+    """Save wizard answers without overwriting anything already there."""
+    stem, suffix = Path(defaults.CONFIG_FILENAME).stem, Path(defaults.CONFIG_FILENAME).suffix
+    for n in range(1000):
+        path = directory / (f"{stem}{suffix}" if n == 0 else f"{stem}-{n}{suffix}")
+        try:
+            with path.open("x", encoding="utf-8") as fh:
+                fh.write(text)
+            return path
+        except FileExistsError:
+            continue
+    raise OSError(f"could not find a free file name for answers in {directory}")
+
+
+def run(args: argparse.Namespace) -> int:
+    try:
+        answers = run_wizard()
+    except KeyboardInterrupt:
+        print("\naborted, nothing written", file=sys.stderr)
+        return 130
+
+    try:
+        config = parse_config(answers, source="your answers")
+    except ConfigError as exc:
+        saved = save_answers(Path.cwd(), yaml.safe_dump(answers, sort_keys=False))
+        print(f"error: {exc}", file=sys.stderr)
+        print(
+            f"answers saved to {saved}; edit it and run: "
+            f"plinth generate --config {saved.name} --output {args.output}",
+            file=sys.stderr,
+        )
+        return 2
+
+    plan = build_plan(config)
+    target = args.output / config.project.name
+    print(f"\nWill create under {target.resolve()}:")
+    print("\n".join(summary(plan, render_plan(plan))))
+    if not questionary.confirm("Generate now?", default=True).unsafe_ask():
+        print("nothing written")
+        return 0
+    return write_and_report(plan, target, init_git=not args.no_git)

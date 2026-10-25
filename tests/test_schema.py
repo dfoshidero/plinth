@@ -1,7 +1,7 @@
 import pytest
 
 from plinth import config as defaults
-from plinth.loader import ConfigError, parse_config
+from plinth.model.loader import ConfigError, parse_config
 
 
 def test_base_config_is_valid(config_dict):
@@ -9,7 +9,7 @@ def test_base_config_is_valid(config_dict):
 
 
 def test_examples_are_valid(example):
-    from plinth.loader import load_config
+    from plinth.model.loader import load_config
 
     load_config(example)
 

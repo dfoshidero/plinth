@@ -10,11 +10,11 @@ import yaml
 from jinja2 import Environment, FileSystemLoader, StrictUndefined
 
 from plinth import config as defaults
-from plinth import settings
-from plinth.loader import dump_config
-from plinth.plan import Plan, RepoPlan
+from plinth.model.loader import dump_config
+from plinth.model.plan import Plan, RepoPlan
+from plinth.output import checklist
 
-BLUEPRINTS_DIR = Path(__file__).resolve().parent / "blueprints"
+BLUEPRINTS_DIR = Path(__file__).resolve().parent.parent / "blueprints"
 TEMPLATE_SUFFIX = ".j2"
 DOT_PREFIX = "dot-"  # blueprint "dot-gitignore" renders as ".gitignore"
 EXECUTABLE_SUFFIXES = (".sh",)
@@ -83,9 +83,9 @@ def render_plan(plan: Plan, blueprints_root: Path = BLUEPRINTS_DIR) -> FileMap:
         "plan": plan,
         "defaults": defaults,
         "git_token_user": defaults.GIT_TOKEN_USER[project.git_provider.value],
-        "ci_settings": settings.ci_settings(plan),
-        "ci_settings_location": settings.SETTINGS_LOCATION[project.git_provider],
-        "registry_note": settings.registry_note(plan),
+        "ci_settings": checklist.ci_settings(plan),
+        "ci_settings_location": checklist.SETTINGS_LOCATION[project.git_provider],
+        "registry_note": checklist.registry_note(plan),
     }
     files: FileMap = {}
 

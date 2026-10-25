@@ -12,8 +12,8 @@ from pathlib import Path
 import yaml
 
 from plinth import config as defaults
-from plinth.loader import ConfigError, parse_config
-from plinth.schema import ProjectConfig
+from plinth.model.loader import ConfigError, parse_config
+from plinth.model.schema import ProjectConfig
 
 
 @dataclass(frozen=True)

@@ -5,9 +5,9 @@ from pathlib import Path
 
 import pytest
 
-from plinth.loader import load_config
-from plinth.plan import build_plan
-from plinth.render import render_plan
+from plinth.model.loader import load_config
+from plinth.model.plan import build_plan
+from plinth.output.render import render_plan
 
 ROOT = Path(__file__).resolve().parent.parent
 EXAMPLES = sorted((ROOT / "examples").glob("*/plinth.yaml"))

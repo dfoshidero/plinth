@@ -9,7 +9,7 @@ import tempfile
 from pathlib import Path
 
 from plinth import config as defaults
-from plinth.render import FileMap, is_executable
+from plinth.output.render import FileMap, is_executable
 
 INITIAL_COMMIT_MESSAGE = "chore: initial commit"
 
