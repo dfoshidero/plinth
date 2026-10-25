@@ -18,7 +18,7 @@ jobs:
           BASE: ${{ github.event.pull_request.base.sha }}
           HEAD: ${{ github.event.pull_request.head.sha }}
         run: |
-          pattern='co-authored-by:.*(claude|anthropic|copilot|openai|chatgpt|gpt-|cursor|gemini|codeium|devin|aider)|generated (with|by) .*(claude|copilot|chatgpt|cursor|ai)'
+          pattern='co-authored-by:.*\b(claude|anthropic|copilot|openai|chatgpt|gpt-|cursor|gemini|codeium|devin|aider)\b|generated (with|by) .*\b(claude|copilot|chatgpt|cursor|ai)\b'
           if git log --format='%H%n%B' "$BASE..$HEAD" | grep -iE "$pattern"; then
             echo "::error::This pull request contains AI attribution. See CONTRIBUTING.md: contributions must be written by humans."
             exit 1
