@@ -38,6 +38,16 @@ Both must pass before a pull request is merged.
 - Blueprints live in `plinth/blueprints/`. `.j2` files are rendered with Jinja; path segments
   starting with `dot-` are written with a leading `.`.
 
+## Releasing (maintainers)
+
+1. Open a pull request that bumps `version` in `pyproject.toml` (and run `uv lock`).
+2. Once CI passes on the branch, merge it. CI runs again on `main`.
+3. When `main` passes and that version has no tag yet, CI builds the package and waits for
+   approval of the `pypi` deployment. Approve it in the workflow run to publish to PyPI;
+   CI then tags the commit `v<version>` and creates the GitHub release.
+
+Pushes to `main` that don't change the version never propose a release.
+
 ## Reporting security issues
 
 Please don't open a public issue for security problems. Use GitHub's private vulnerability
