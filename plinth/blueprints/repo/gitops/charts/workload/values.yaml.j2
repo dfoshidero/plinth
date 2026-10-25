@@ -7,3 +7,7 @@
 # (databases, queues, ...) are not provisioned by this chart.
 image: ""
 replicas: 1
+# Secrets used to pull private images. scripts/bootstrap-local.sh creates this one when
+# REGISTRY_USERNAME and REGISTRY_PASSWORD are set; a missing secret is ignored.
+imagePullSecrets:
+  - {{ defaults.IMAGE_PULL_SECRET }}

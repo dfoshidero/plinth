@@ -2,7 +2,7 @@
 
 Only files that belong to the new workload are created. Existing files are never
 overwritten; ones that plinth would now generate differently are reported so the
-user can review them.
+user can review them (or merge them with `plinth update`).
 """
 
 from __future__ import annotations
@@ -10,20 +10,23 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from plinth import config as defaults
-from plinth.loader import ConfigError, config_to_dict, dump_config, load_config, parse_config
-from plinth.plan import build_plan
-from plinth.render import render_plan
+from plinth.loader import ConfigError, config_to_dict, dump_config, parse_config
+from plinth.plan import Plan, RepoPlan, build_plan
+from plinth.render import config_path, render_plan
 from plinth.schema import AppKind, Architecture, ProjectConfig
+from plinth.workspace import find_workspace, load_project_config
 from plinth.write import init_repo, write_tree
 
 
 @dataclass
 class AddResult:
     config: ProjectConfig
+    plan: Plan
+    root: Path
     created: list[str] = field(default_factory=list)
+    updated: list[str] = field(default_factory=list)
     kept: list[str] = field(default_factory=list)
-    new_repos: list[str] = field(default_factory=list)
+    new_repos: list[RepoPlan] = field(default_factory=list)
     notes: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
 
@@ -31,10 +34,10 @@ class AddResult:
 def add_application(
     project_dir: Path, kind: AppKind, name: str, port: int | None = None, init_git: bool = True
 ) -> AddResult:
-    config_path = project_dir / defaults.CONFIG_FILENAME
-    old = load_config(config_path)
+    workspace = find_workspace(project_dir)
+    root = workspace.root
+    old, notes = load_project_config(workspace), []
     data = config_to_dict(old)
-    notes = []
 
     if kind is AppKind.MODULAR_MONOLITH:
         raise ConfigError("a project has exactly one modular-monolith; add a service or worker")
@@ -46,23 +49,26 @@ def add_application(
     if port is not None:
         app["port"] = port
     data["applications"].append(app)
-    new = parse_config(data, source=str(config_path))
+    new = parse_config(data, source=str(workspace.config_path))
 
     old_plan, new_plan = build_plan(old), build_plan(new)
     old_folders = {r.folder for r in old_plan.repos}
     files = render_plan(new_plan)
-    result = AddResult(config=new, notes=notes)
+    config_rel = config_path(new_plan)
+    result = AddResult(config=new, plan=new_plan, root=root, notes=notes)
 
     new_repos = [r for r in new_plan.repos if r.folder not in old_folders]
     for repo in new_repos:
-        if (project_dir / repo.folder).exists():
+        if (root / repo.folder).exists():
             raise ConfigError(f"cannot create repository folder, it already exists: {repo.folder}")
 
     owned = _new_workload_prefixes(new_plan, name)
     to_write = {}
     for rel, content in sorted(files.items()):
+        if rel == config_rel:
+            continue
         folder = rel.split("/", 1)[0]
-        dest = project_dir / rel
+        dest = root / rel
         if folder not in old_folders or rel.startswith(owned):
             if dest.exists():
                 if dest.read_bytes() != content:
@@ -73,19 +79,33 @@ def add_application(
         elif dest.exists() and dest.read_bytes() != content:
             result.kept.append(rel)
 
-    write_tree(project_dir, to_write)
-    config_path.write_text(dump_config(new), encoding="utf-8")
+    missing = sorted(
+        {rel.split("/", 1)[0] for rel in to_write}
+        & old_folders - {p.name for p in root.iterdir() if p.is_dir()}
+    )
+    if missing:
+        raise ConfigError(
+            f"repositories not found in {root}: {', '.join(missing)}; "
+            "clone them next to the GitOps repository first"
+        )
+
+    write_tree(root, to_write)
+    (root / config_rel).write_text(dump_config(new), encoding="utf-8")
+    result.updated.append(config_rel)
+    if workspace.legacy:
+        workspace.config_path.unlink()
+        notes.append(f"moved {workspace.config_path.name} into {config_rel} so it is versioned")
 
     for repo in new_repos:
-        result.new_repos.append(repo.folder)
+        result.new_repos.append(repo)
         if init_git:
-            warning = init_repo(project_dir / repo.folder, repo.url)
+            warning = init_repo(root / repo.folder, repo.url)
             if warning:
                 result.warnings.append(warning)
     return result
 
 
-def _new_workload_prefixes(plan, name: str) -> tuple[str, ...]:
+def _new_workload_prefixes(plan: Plan, name: str) -> tuple[str, ...]:
     prefixes = [
         f"{repo.folder}/{wl.source_dir}"
         for repo, wl in plan.workloads()

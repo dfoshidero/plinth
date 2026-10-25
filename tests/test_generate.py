@@ -167,3 +167,60 @@ def test_helm_chart_renders_each_workload(rendered, tmp_path):
         kinds = {d["kind"] for d in yaml.safe_load_all(result.stdout) if d}
         assert "Deployment" in kinds
         assert ("Service" in kinds) == (wl.port is not None)
+
+
+def test_workload_applications_clean_up_and_tolerate_missing_values(rendered):
+    plan, files = rendered
+    for env in plan.config.environments:
+        appset = yaml.safe_load(files[f"{plan.gitops.folder}/apps/{env}.yaml"])
+        template = appset["spec"]["template"]
+        assert "resources-finalizer.argocd.argoproj.io" in template["metadata"]["finalizers"]
+        assert template["spec"]["sources"][0]["helm"]["ignoreMissingValueFiles"] is True
+
+
+def test_images_are_linked_to_their_repository(rendered):
+    plan, files = rendered
+    for repo, wl in plan.workloads():
+        dockerfile = files[f"{repo.folder}/{wl.source_dir}Dockerfile"].decode()
+        assert f'org.opencontainers.image.source="{repo.web_url}"' in dockerfile
+
+
+@pytest.mark.skipif(shutil.which("helm") is None, reason="helm not installed")
+def test_pods_meet_the_restricted_pod_security_standard(rendered, tmp_path):
+    plan, files = rendered
+    write_tree(tmp_path, files)
+    repo, wl = plan.workloads()[0]
+    out = subprocess.run(
+        [
+            "helm",
+            "template",
+            wl.name,
+            str(tmp_path / plan.gitops.folder / "charts" / "workload"),
+            "-f",
+            str(tmp_path / repo.folder / wl.score_path),
+            "--set",
+            "image=example/image:1",
+        ],
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=True,
+    ).stdout
+    deployment = next(d for d in yaml.safe_load_all(out) if d and d["kind"] == "Deployment")
+    pod = deployment["spec"]["template"]["spec"]
+    assert pod["securityContext"]["runAsNonRoot"] is True
+    assert pod["securityContext"]["seccompProfile"]["type"] == "RuntimeDefault"
+    assert pod["imagePullSecrets"]
+    container = pod["containers"][0]["securityContext"]
+    assert container["allowPrivilegeEscalation"] is False
+    assert container["readOnlyRootFilesystem"] is True
+    assert container["capabilities"]["drop"] == ["ALL"]
+
+
+def test_ship_permissions_are_scoped_to_the_ship_job(config_dict):
+    plan = build_plan(parse_config(config_dict))
+    workflow = yaml.safe_load(render_plan(plan)["atlas-app/.github/workflows/ci.yaml"])
+    assert "packages" not in workflow["permissions"]
+    assert workflow["jobs"]["ship"]["permissions"]["packages"] == "write"
+    assert "packages" not in workflow["jobs"]["test"].get("permissions", {})
+    assert workflow["jobs"]["ship"]["concurrency"]["cancel-in-progress"] is False

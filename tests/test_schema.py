@@ -79,7 +79,18 @@ def test_out_of_range_port_rejected(config_dict, port):
         parse_config(config_dict)
 
 
-@pytest.mark.parametrize("registry", ["https://ghcr.io/acme", "ghcr.io/acme/", ""])
+@pytest.mark.parametrize(
+    "registry",
+    [
+        "https://ghcr.io/acme",
+        "ghcr.io/acme/",
+        "",
+        "ghcr.io/YOUR_ACCOUNT",
+        "ghcr.io/Acme",
+        'ghcr.io/acme"x',
+        "ghcr.io/ac me",
+    ],
+)
 def test_bad_registry_rejected(config_dict, registry):
     config_dict["project"]["registry"] = registry
     with pytest.raises(ConfigError, match="registry"):
@@ -88,7 +99,15 @@ def test_bad_registry_rejected(config_dict, registry):
 
 @pytest.mark.parametrize(
     "url",
-    ["github.com/acme", "http://github.com/acme", "https://github.com/acme/", "https://github.com"],
+    [
+        "github.com/acme",
+        "http://github.com/acme",
+        "https://github.com/acme/",
+        "https://github.com",
+        "https://github.com/YOUR_ACCOUNT",
+        'https://github.com/acme"x',
+        "https://github.com/{{x}}",
+    ],
 )
 def test_bad_git_base_url_rejected(config_dict, url):
     config_dict["project"]["gitBaseUrl"] = url
@@ -132,3 +151,11 @@ def test_error_message_names_the_field(config_dict):
         parse_config(config_dict, source="plinth.yaml")
     assert "plinth.yaml" in str(exc.value)
     assert "kebab-case (" in str(exc.value)
+
+
+@pytest.mark.parametrize(
+    "registry", ["ghcr.io/acme", "localhost:5000/team/app", "registry.gitlab.com/a-b/c_d"]
+)
+def test_good_registries_accepted(config_dict, registry):
+    config_dict["project"]["registry"] = registry
+    assert parse_config(config_dict).project.registry == registry

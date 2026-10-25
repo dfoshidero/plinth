@@ -1,0 +1,179 @@
+#!/bin/sh
+# CI for this repository: test, build and ship every workload. Runs the same way
+# locally and in any CI system; the provider's CI file only calls it.
+#
+# Workloads are found by their score.yaml files, so adding one needs no change here.
+#
+#   scripts/ci.sh workloads       list workloads as "name directory"
+#   scripts/ci.sh test            run every workload's unit tests (needs python3)
+#   scripts/ci.sh build NAME      build one workload's image (needs docker)
+#   scripts/ci.sh ship            build and push every image, then record the release in
+#                                 the GitOps repository (needs docker and git)
+#
+# ship reads these environment variables:
+#   COMMIT              commit being shipped; image tag and app revision (default: HEAD)
+#   REGISTRY_USERNAME   registry login for {{ project.registry }}
+#   REGISTRY_PASSWORD
+#   GITOPS_TOKEN        token that can push to {{ plan.gitops.url }}
+set -eu
+
+PROJECT="{{ project.name }}"
+REGISTRY="{{ project.registry }}"
+APP_REPO_URL="{{ repo.url }}"
+SOURCE_URL="{{ repo.web_url }}"
+GITOPS_REPO_URL="{{ plan.gitops.url }}"
+RELEASE_ENVIRONMENT="{{ defaults.RELEASE_ENVIRONMENT }}"
+GIT_TOKEN_USER="{{ git_token_user }}"
+PUSH_ATTEMPTS={{ defaults.RELEASE_PUSH_ATTEMPTS }}
+
+cd "$(dirname "$0")/.."
+APP_DIR=$(pwd)
+
+fail() {
+  echo "error: $*" >&2
+  exit 1
+}
+
+workloads() {
+  files=$(find . -name score.yaml ! -path './.git/*' ! -path '*/node_modules/*' | sort)
+  [ -n "$files" ] || fail "no score.yaml found; nothing to do"
+  for file in $files; do
+    name=$(awk '/^metadata:/ { m = 1; next } m && /^[^ #]/ { m = 0 } m && /^  name:/ { gsub(/["\047]/, "", $2); print $2; exit }' "$file")
+    [ -n "$name" ] || fail "$file has no metadata.name"
+    dir=$(dirname "$file")
+    echo "$name ${dir#./}"
+  done
+}
+
+image_name() {
+  echo "$REGISTRY/$PROJECT-$1"
+}
+
+build() {
+  # build NAME DIR TAG
+  docker build --label "org.opencontainers.image.source=$SOURCE_URL" \
+    --label "org.opencontainers.image.revision=$3" -t "$(image_name "$1"):$3" "$2"
+}
+
+cmd_test() {
+  list=$(workloads)
+  echo "$list" | while read -r name dir; do
+    echo "== $name"
+    (cd "$dir" && "${PYTHON:-python3}" -m unittest discover -s tests -t . -v) || exit 1
+  done || fail "tests failed"
+}
+
+cmd_build() {
+  [ $# -eq 1 ] || fail "usage: scripts/ci.sh build NAME"
+  list=$(workloads)
+  dir=$(echo "$list" | awk -v n="$1" '$1 == n { print $2 }')
+  [ -n "$dir" ] || fail "unknown workload '$1'; known: $(echo "$list" | awk '{ print $1 }' | tr '\n' ' ')"
+  build "$1" "$dir" "${TAG:-local}"
+}
+
+require_env() {
+  missing=""
+  for var in "$@"; do
+    eval "value=\${$var:-}"
+    [ -n "$value" ] || missing="$missing $var"
+  done
+  [ -z "$missing" ] || fail "missing required settings:$missing (see README.md, 'CI settings')"
+}
+
+# revision currently released for a workload, empty if none
+released_revision() {
+  file="$1/environments/$RELEASE_ENVIRONMENT/$2/release.yaml"
+  [ -f "$file" ] && sed -n 's/^revision: *["\047]\{0,1\}\([0-9a-zA-Z]*\).*/\1/p' "$file" || true
+}
+
+# true if the recorded release already contains COMMIT (same or newer), so shipping
+# COMMIT would roll it back. Unknown history counts as older.
+superseded() {
+  old=$(released_revision "$1" "$2")
+  [ -n "$old" ] && git -C "$APP_DIR" merge-base --is-ancestor "$COMMIT" "$old" 2>/dev/null
+}
+
+write_release() {
+  # write_release GITOPS_DIR NAME DIR IMAGE
+  dest="$1/environments/$RELEASE_ENVIRONMENT/$2"
+  mkdir -p "$dest"
+  if [ "$3" = "." ]; then score="score.yaml"; else score="$3/score.yaml"; fi
+  cat >"$dest/release.yaml" <<EOF
+workload: $2
+image: $4
+revision: $COMMIT
+appRepoURL: $APP_REPO_URL
+scorePath: $score
+EOF
+}
+
+cmd_ship() {
+  COMMIT="${COMMIT:-$(git rev-parse HEAD)}"
+  require_env REGISTRY_USERNAME REGISTRY_PASSWORD GITOPS_TOKEN
+  push_url="${GITOPS_PUSH_URL:-https://${GIT_TOKEN_USER}:${GITOPS_TOKEN}@${GITOPS_REPO_URL#https://}}"
+
+  work=$(mktemp -d)
+  trap 'rm -rf "$work"' EXIT
+  git clone -q "$push_url" "$work/gitops" || fail "cannot clone $GITOPS_REPO_URL; check GITOPS_TOKEN"
+  git -C "$work/gitops" rev-parse -q --verify HEAD >/dev/null || fail "$GITOPS_REPO_URL is empty; push the GitOps repository first"
+  branch=$(git -C "$work/gitops" rev-parse --abbrev-ref HEAD)
+
+  printf '%s' "$REGISTRY_PASSWORD" | docker login "${REGISTRY%%/*}" -u "$REGISTRY_USERNAME" --password-stdin
+  : >"$work/shipped"
+  workloads >"$work/workloads"
+  while read -r name dir; do
+    if superseded "$work/gitops" "$name"; then
+      echo "skip $name: $RELEASE_ENVIRONMENT already runs $COMMIT or a newer commit"
+      continue
+    fi
+    image=$(image_name "$name")
+    build "$name" "$dir" "$COMMIT"
+    docker push -q "$image:$COMMIT"
+    digest=$(docker image inspect --format '{% raw %}{{range .RepoDigests}}{{println .}}{{end}}{% endraw %}' "$image:$COMMIT" | grep "^$image@" | head -n 1)
+    [ -n "$digest" ] || fail "no digest for $image:$COMMIT after push"
+    echo "$name $dir $image:$COMMIT@${digest#*@}" >>"$work/shipped"
+  done <"$work/workloads"
+
+  [ -s "$work/shipped" ] || { echo "nothing to release"; return 0; }
+
+  # Another pipeline may push to the GitOps repo at the same time: start from its
+  # latest state on every attempt and never replace a newer release.
+  cd "$work/gitops"
+  git config user.name "$PROJECT CI"
+  git config user.email "ci@$PROJECT.invalid"
+  attempt=1
+  while :; do
+    git fetch -q origin "$branch"
+    git reset -q --hard FETCH_HEAD
+    names=""
+    while read -r name dir image; do
+      if superseded "$work/gitops" "$name"; then
+        echo "skip $name: a newer release was recorded meanwhile"
+        continue
+      fi
+      write_release . "$name" "$dir" "$image"
+      names="$names $name"
+    done <"$work/shipped"
+    git add -A
+    if git diff --cached --quiet; then echo "nothing to release"; return 0; fi
+    git commit -q -m "release:$names $(echo "$COMMIT" | cut -c1-12)"
+    if git push -q origin "HEAD:$branch"; then
+      echo "released$names to $RELEASE_ENVIRONMENT"
+      return 0
+    fi
+    [ "$attempt" -lt "$PUSH_ATTEMPTS" ] || fail "could not push to $GITOPS_REPO_URL after $PUSH_ATTEMPTS attempts"
+    attempt=$((attempt + 1))
+    echo "push rejected, retrying ($attempt/$PUSH_ATTEMPTS)"
+    sleep "$attempt"
+  done
+}
+
+command="${1:-}"
+[ $# -gt 0 ] && shift
+case "$command" in
+  workloads) workloads ;;
+  test) cmd_test ;;
+  build) cmd_build "$@" ;;
+  ship) cmd_ship ;;
+  *) fail "usage: scripts/ci.sh workloads|test|build NAME|ship" ;;
+esac

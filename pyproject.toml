@@ -7,7 +7,7 @@ license = "MIT"
 license-files = ["LICENSE"]
 authors = [{ name = "dfoshidero" }]
 requires-python = ">=3.12"
-keywords = ["scaffolding", "generator", "gitops", "argo-cd", "dagger", "score", "monorepo"]
+keywords = ["scaffolding", "generator", "gitops", "argo-cd", "score", "monorepo"]
 classifiers = [
 	"Development Status :: 3 - Alpha",
 	"Environment :: Console",

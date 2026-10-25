@@ -6,7 +6,15 @@ import questionary
 from questionary import Choice
 
 from plinth import config as defaults
-from plinth.schema import NAME_RE, AppKind, Architecture, GitProvider, Layout
+from plinth.schema import (
+    NAME_RE,
+    AppKind,
+    Architecture,
+    GitProvider,
+    Layout,
+    validate_git_base_url,
+    validate_registry,
+)
 
 
 def _name_ok(value: str) -> bool | str:
@@ -15,6 +23,26 @@ def _name_ok(value: str) -> bool | str:
     return (
         f"lowercase kebab-case, {defaults.NAME_MIN_LEN}-{defaults.NAME_MAX_LEN} chars, e.g. atlas"
     )
+
+
+def _check(validator):
+    """Adapt a schema validator to questionary: True, or the error message."""
+
+    def check(value: str) -> bool | str:
+        try:
+            validator(value)
+        except ValueError as exc:
+            return str(exc)
+        return True
+
+    return check
+
+
+def _suggest_registry(provider: str, git_base_url: str) -> str:
+    """ghcr.io/<owner> for GitHub, registry.gitlab.com/<group> for GitLab."""
+    host = defaults.BUILTIN_REGISTRY.get(provider)
+    path = git_base_url.split("://", 1)[-1].split("/", 1)[-1].lower()
+    return f"{host}/{path}" if host and path else defaults.DEFAULT_REGISTRY
 
 
 def _port_ok(value: str) -> bool | str:
@@ -102,10 +130,13 @@ def run_wizard() -> dict:
     git_base_url = questionary.text(
         "Git base URL the repos will live under (https://host/org):",
         default=defaults.DEFAULT_GIT_BASE_URL[provider],
+        validate=_check(validate_git_base_url),
     ).unsafe_ask()
 
     registry = questionary.text(
-        "Container registry (host/path, no scheme):", default=defaults.DEFAULT_REGISTRY
+        "Container registry (lowercase host/path, no scheme):",
+        default=_suggest_registry(provider, git_base_url),
+        validate=_check(validate_registry),
     ).unsafe_ask()
 
     applications = _ask_applications(architecture)

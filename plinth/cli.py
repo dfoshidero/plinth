@@ -11,12 +11,18 @@ import yaml
 
 from plinth import config as defaults
 from plinth.add import add_application
-from plinth.loader import ConfigError, dump_config, load_config, parse_config
+from plinth.loader import ConfigError, load_config, parse_config
 from plinth.plan import Plan, build_plan
 from plinth.render import GENERATOR_VERSION, FileMap, render_plan
 from plinth.schema import AppKind
+from plinth.settings import next_steps
+from plinth.update import update_project
 from plinth.wizard import run_wizard
 from plinth.write import OutputExistsError, write_project
+
+PROJECT_DIR_HELP = (
+    "folder holding the project's repositories, or any one of them (default: current)"
+)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -46,13 +52,13 @@ def build_parser() -> argparse.ArgumentParser:
     add.add_argument("kind", choices=[AppKind.SERVICE.value, AppKind.WORKER.value])
     add.add_argument("name")
     add.add_argument("--port", type=int, help="HTTP port (services only)")
-    add.add_argument(
-        "--project-dir",
-        type=Path,
-        default=Path("."),
-        help=f"folder containing {defaults.CONFIG_FILENAME} (default: current)",
-    )
+    add.add_argument("--project-dir", type=Path, default=Path("."), help=PROJECT_DIR_HELP)
     add.add_argument("--no-git", action="store_true", help="skip git init for new repositories")
+
+    update = sub.add_parser(
+        "update", help="merge the latest plinth templates into every repository"
+    )
+    update.add_argument("--project-dir", type=Path, default=Path("."), help=PROJECT_DIR_HELP)
     return parser
 
 
@@ -66,7 +72,6 @@ def _summary(plan: Plan, files: FileMap) -> list[str]:
 
 def _generate(plan: Plan, target: Path, init_git: bool) -> int:
     files = render_plan(plan)
-    files[defaults.CONFIG_FILENAME] = dump_config(plan.config).encode("utf-8")
     try:
         warnings = write_project(target, files, {r.folder: r.url for r in plan.repos}, init_git)
     except OutputExistsError as exc:
@@ -75,6 +80,8 @@ def _generate(plan: Plan, target: Path, init_git: bool) -> int:
     for warning in warnings:
         print(f"warning: {warning}", file=sys.stderr)
     print(f"generated {len(files)} files under {target}")
+    git_ready = init_git and not warnings
+    print("\n".join(next_steps(plan, target, list(plan.repos), git_ready)))
     return 0
 
 
@@ -133,9 +140,8 @@ def run_add(args: argparse.Namespace) -> int:
         print(f"note: {note}")
     for path in result.created:
         print(f"created  {path}")
-    for folder in result.new_repos:
-        print(f"new repository: {folder}/ (create it on your git host and push)")
-    touched = sorted({p.split("/", 1)[0] for p in result.created} - set(result.new_repos))
+    new_folders = {r.folder for r in result.new_repos}
+    touched = sorted({p.split("/", 1)[0] for p in result.created + result.updated} - new_folders)
     if touched:
         print(f"commit the new files in: {', '.join(touched)}")
     if result.kept:
@@ -144,7 +150,34 @@ def run_add(args: argparse.Namespace) -> int:
             print(f"  {path}")
     for warning in result.warnings:
         print(f"warning: {warning}", file=sys.stderr)
+    if result.new_repos:
+        git_ready = not args.no_git and not result.warnings
+        print("\n".join(next_steps(result.plan, result.root, result.new_repos, git_ready)))
     return 0
+
+
+def run_update(args: argparse.Namespace) -> int:
+    try:
+        result = update_project(args.project_dir)
+    except ConfigError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    for note in result.notes:
+        print(f"note: {note}")
+    width = max(len(r.folder) for r in result.repos)
+    for repo in result.repos:
+        detail = f": {repo.detail}" if repo.detail else ""
+        print(f"  {repo.folder:<{width}}  {repo.status}{detail}")
+        for path in repo.conflicts:
+            print(f"  {'':<{width}}    conflict: {path}")
+    if any(r.status == "conflicts" for r in result.repos):
+        print(
+            "\nresolve the conflicts in those repositories, then `git commit` to finish the merge"
+        )
+        return 1
+    if any(r.status == "merged" for r in result.repos):
+        print("\nreview the merges, then push each repository with: git push origin HEAD plinth")
+    return 1 if any(r.status == "skipped" for r in result.repos) else 0
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -154,6 +187,8 @@ def main(argv: list[str] | None = None) -> int:
         return run_project(args.output, init_git=not args.no_git)
     if args.command == "add":
         return run_add(args)
+    if args.command == "update":
+        return run_update(args)
 
     try:
         config = load_config(args.config)

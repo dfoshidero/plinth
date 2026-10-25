@@ -1,5 +1,7 @@
 FROM {{ defaults.PYTHON_IMAGE }}
 
+# links the image to its repository (on ghcr.io this also grants the repo access to it)
+LABEL org.opencontainers.image.source="{{ repo.web_url }}"
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     APP_NAME={{ workload.name }}

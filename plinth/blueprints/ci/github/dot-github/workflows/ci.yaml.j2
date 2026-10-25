@@ -1,0 +1,46 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: {{ defaults.CHECKOUT_ACTION }}
+      - uses: {{ defaults.SETUP_PYTHON_ACTION }}
+        with:
+          python-version: "{{ defaults.PYTHON_VERSION }}"
+      - run: ./scripts/ci.sh test
+
+  ship:
+    if: github.event_name == 'push'
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    # one release at a time; a newer push waits instead of racing an older one
+    concurrency:
+      group: ship-{{ "${{ github.ref }}" }}
+      cancel-in-progress: false
+    steps:
+      - uses: {{ defaults.CHECKOUT_ACTION }}
+        with:
+          fetch-depth: 0  # ship compares commits so it never rolls a release back
+      - run: ./scripts/ci.sh ship
+        env:
+          COMMIT: {{ "${{ github.sha }}" }}
+{% if project.registry.split("/")[0] == defaults.BUILTIN_REGISTRY.github %}
+          REGISTRY_USERNAME: {{ "${{ vars.REGISTRY_USERNAME || github.actor }}" }}
+          REGISTRY_PASSWORD: {{ "${{ secrets.REGISTRY_PASSWORD || secrets.GITHUB_TOKEN }}" }}
+{% else %}
+          REGISTRY_USERNAME: {{ "${{ vars.REGISTRY_USERNAME }}" }}
+          REGISTRY_PASSWORD: {{ "${{ secrets.REGISTRY_PASSWORD }}" }}
+{% endif %}
+          GITOPS_TOKEN: {{ "${{ secrets.GITOPS_TOKEN }}" }}

@@ -56,3 +56,4 @@ def test_init_repo_commits_and_sets_remote(tmp_path, monkeypatch):
     assert git("rev-list", "--count", "HEAD").strip() == "1"
     assert git("remote", "get-url", "origin").strip() == "https://example.com/acme/repo.git"
     assert git("status", "--porcelain") == ""
+    assert git("rev-parse", "plinth") == git("rev-parse", "HEAD")

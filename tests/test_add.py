@@ -1,6 +1,6 @@
 import pytest
-import yaml
 
+from plinth import config as defaults
 from plinth.add import add_application
 from plinth.loader import ConfigError, load_config, parse_config
 from plinth.plan import build_plan
@@ -18,7 +18,6 @@ def project(tmp_path, config_dict):
             config_dict["applications"] = applications
         config = parse_config(config_dict)
         files = render_plan(build_plan(config))
-        files["plinth.yaml"] = yaml.safe_dump(config_dict).encode()
         root = tmp_path / "atlas"
         write_project(root, files, {}, init_git=False)
         return root
@@ -32,14 +31,15 @@ def test_add_service_to_monorepo_creates_its_files(project):
     assert (root / "atlas-app" / "apps" / "billing" / "score.yaml").exists()
     assert any("environments/dev/billing/" in p for p in result.created)
     assert result.new_repos == []
-    names = [a.name for a in load_config(root / "plinth.yaml").applications]
+    names = [a.name for a in load_config(root / "atlas-gitops" / "plinth.yaml").applications]
     assert "billing" in names
+    assert "atlas-gitops/plinth.yaml" in result.updated
 
 
 def test_add_to_split_repo_creates_a_new_repository(project):
     root = project(layout="split-repo")
     result = add_application(root, AppKind.WORKER, "mailer", init_git=False)
-    assert result.new_repos == ["atlas-mailer"]
+    assert [r.folder for r in result.new_repos] == ["atlas-mailer"]
     assert (root / "atlas-mailer" / "score.yaml").exists()
 
 
@@ -88,5 +88,32 @@ def test_add_rejects_port_on_worker(project):
 
 
 def test_add_requires_a_project_config(tmp_path):
-    with pytest.raises(ConfigError, match="cannot read"):
+    with pytest.raises(ConfigError, match="no plinth project"):
         add_application(tmp_path, AppKind.SERVICE, "billing", init_git=False)
+
+
+def test_add_works_from_inside_a_repository(project):
+    root = project()
+    add_application(root / "atlas-gitops", AppKind.SERVICE, "billing", init_git=False)
+    assert (root / "atlas-app" / "apps" / "billing").is_dir()
+
+
+def test_add_needs_the_app_repository_cloned(project):
+    root = project()
+    import shutil
+
+    shutil.rmtree(root / "atlas-app")
+    with pytest.raises(ConfigError, match="clone them"):
+        add_application(root, AppKind.SERVICE, "billing", init_git=False)
+    assert not (root / "atlas-app").exists()
+
+
+def test_add_moves_a_legacy_config_into_the_gitops_repo(project):
+    root = project()
+    gitops_config = root / "atlas-gitops" / defaults.CONFIG_FILENAME
+    (root / defaults.CONFIG_FILENAME).write_bytes(gitops_config.read_bytes())
+    gitops_config.unlink()
+    result = add_application(root, AppKind.SERVICE, "billing", init_git=False)
+    assert not (root / defaults.CONFIG_FILENAME).exists()
+    assert "billing" in [a.name for a in load_config(gitops_config).applications]
+    assert any("moved" in n for n in result.notes)

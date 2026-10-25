@@ -29,6 +29,10 @@ class RepoPlan:
     url: str
     workloads: tuple[WorkloadPlan, ...]
 
+    @property
+    def web_url(self) -> str:
+        return self.url.removesuffix(".git")
+
 
 @dataclass(frozen=True)
 class Plan:

@@ -1,0 +1,35 @@
+stages: [test, ship]
+
+test:
+  stage: test
+  image: {{ defaults.PYTHON_IMAGE }}
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+  script:
+    - sh scripts/ci.sh test
+
+ship:
+  stage: ship
+  image: {{ defaults.DOCKER_IMAGE }}
+  services:
+    - {{ defaults.DOCKER_IMAGE }}-dind
+  # one release at a time; a newer pipeline waits instead of racing an older one
+  resource_group: release
+  variables:
+    DOCKER_HOST: tcp://docker:2376
+    DOCKER_TLS_CERTDIR: /certs
+    DOCKER_TLS_VERIFY: "1"
+    DOCKER_CERT_PATH: /certs/client
+    GIT_DEPTH: "0"  # ship compares commits so it never rolls a release back
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+  before_script:
+    - apk add --no-cache git
+  script:
+{% if project.registry.split("/")[0] == defaults.BUILTIN_REGISTRY.gitlab %}
+    # GitLab's own registry: log in with the job's built-in credentials unless overridden
+    - export REGISTRY_USERNAME="${REGISTRY_USERNAME:-$CI_REGISTRY_USER}"
+    - export REGISTRY_PASSWORD="${REGISTRY_PASSWORD:-$CI_REGISTRY_PASSWORD}"
+{% endif %}
+    - COMMIT="$CI_COMMIT_SHA" sh scripts/ci.sh ship
