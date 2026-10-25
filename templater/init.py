@@ -1,0 +1,1 @@
+"""Universal project template generator."""
