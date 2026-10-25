@@ -1,0 +1,33 @@
+apiVersion: score.dev/v1b1
+metadata:
+  name: {{ workload.name }}
+containers:
+  main:
+    image: .
+    variables:
+      APP_NAME: {{ workload.name }}
+{% if workload.port %}
+      PORT: "{{ workload.port }}"
+{% endif %}
+    resources:
+      requests:
+        cpu: "{{ defaults.RESOURCES.requests.cpu }}"
+        memory: "{{ defaults.RESOURCES.requests.memory }}"
+      limits:
+        cpu: "{{ defaults.RESOURCES.limits.cpu }}"
+        memory: "{{ defaults.RESOURCES.limits.memory }}"
+{% if workload.port %}
+    livenessProbe:
+      httpGet:
+        path: {{ defaults.HEALTH_PATH }}
+        port: {{ workload.port }}
+    readinessProbe:
+      httpGet:
+        path: {{ defaults.HEALTH_PATH }}
+        port: {{ workload.port }}
+service:
+  ports:
+    http:
+      port: {{ defaults.SERVICE_PORT }}
+      targetPort: {{ workload.port }}
+{% endif %}

@@ -1,0 +1,44 @@
+"""Entry point for {{ workload.name }}, a background worker. Replace run_once with the real job."""
+
+from __future__ import annotations
+
+import logging
+import os
+import signal
+import threading
+
+APP_NAME = os.environ.get("APP_NAME", "{{ workload.name }}")
+INTERVAL_SECONDS = float(os.environ.get("INTERVAL_SECONDS", "{{ defaults.WORKER_INTERVAL_SECONDS }}"))
+
+log = logging.getLogger(APP_NAME)
+
+
+def run_once() -> str:
+    """Do one unit of work."""
+    message = f"{APP_NAME}: tick"
+    log.info(message)
+    return message
+
+
+def run(stop: threading.Event, interval: float) -> int:
+    """Call run_once every `interval` seconds until `stop` is set. Returns the number of runs."""
+    runs = 0
+    while not stop.is_set():
+        run_once()
+        runs += 1
+        stop.wait(interval)
+    return runs
+
+
+def main() -> None:
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
+    stop = threading.Event()
+    signal.signal(signal.SIGTERM, lambda *_: stop.set())
+    signal.signal(signal.SIGINT, lambda *_: stop.set())
+    log.info("started, interval %ss", INTERVAL_SECONDS)
+    run(stop, INTERVAL_SECONDS)
+    log.info("stopped")
+
+
+if __name__ == "__main__":
+    main()

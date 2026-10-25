@@ -1,0 +1,9 @@
+# Each release passes, in order:
+#   1. the workload's score.yaml (metadata, containers.main, service)
+#   2. environments/<env>/<workload>/values.yaml (replicas, ...)
+#   3. image, set from release.yaml
+# Supported Score fields: metadata.name, containers.main (command, args, variables,
+# resources, livenessProbe, readinessProbe) and service.ports. Score `resources`
+# (databases, queues, ...) are not provisioned by this chart.
+image: ""
+replicas: 1

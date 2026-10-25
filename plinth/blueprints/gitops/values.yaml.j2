@@ -1,0 +1,2 @@
+# {{ workload.name }} in {{ environment }}. Merged over the workload's score.yaml.
+replicas: {{ defaults.REPLICAS.get(environment, defaults.DEFAULT_REPLICAS) }}

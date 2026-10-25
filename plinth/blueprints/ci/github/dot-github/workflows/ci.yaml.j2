@@ -1,0 +1,38 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: {{ defaults.CHECKOUT_ACTION }}
+
+      - name: Test
+        if: github.event_name == 'pull_request'
+        uses: {{ defaults.DAGGER_GITHUB_ACTION }}
+        with:
+          version: "{{ defaults.DAGGER_VERSION }}"
+          call: test
+
+      - name: Ship
+        if: github.event_name == 'push'
+        uses: {{ defaults.DAGGER_GITHUB_ACTION }}
+        env:
+          REGISTRY_PASSWORD: {{ "${{ secrets.REGISTRY_PASSWORD || secrets.GITHUB_TOKEN }}" }}
+          GITOPS_TOKEN: {{ "${{ secrets.GITOPS_TOKEN }}" }}
+        with:
+          version: "{{ defaults.DAGGER_VERSION }}"
+          call: >-
+            ship
+            --commit={{ "${{ github.sha }}" }}
+            --registry-username={{ "${{ vars.REGISTRY_USERNAME || github.actor }}" }}
+            --registry-password=env://REGISTRY_PASSWORD
+            --git-token=env://GITOPS_TOKEN

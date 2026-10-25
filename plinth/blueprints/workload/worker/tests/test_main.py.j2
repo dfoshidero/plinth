@@ -1,0 +1,26 @@
+import threading
+import unittest
+
+from app.main import run, run_once
+
+
+class WorkerTests(unittest.TestCase):
+    def test_run_once_does_work(self):
+        self.assertTrue(run_once())
+
+    def test_run_stops_when_asked(self):
+        stop = threading.Event()
+        timer = threading.Timer(0.05, stop.set)
+        timer.start()
+        runs = run(stop, interval=0.01)
+        timer.join()
+        self.assertGreaterEqual(runs, 1)
+
+    def test_run_does_nothing_when_already_stopped(self):
+        stop = threading.Event()
+        stop.set()
+        self.assertEqual(run(stop, interval=0.01), 0)
+
+
+if __name__ == "__main__":
+    unittest.main()

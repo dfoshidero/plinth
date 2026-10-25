@@ -1,0 +1,5 @@
+apiVersion: v2
+name: workload
+description: Deploys one workload described by a Score file (score.dev/v1b1).
+type: application
+version: 0.1.0

@@ -1,17 +1,35 @@
 [project]
-name = "universal-project-template"
-version = "0.1.0"
+name = "plinth-cli"
+version = "0.2.0"
 description = "Generates local, ready-to-push application and GitOps repositories from one config."
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "dfoshidero" }]
 requires-python = ">=3.12"
+keywords = ["scaffolding", "generator", "gitops", "argo-cd", "dagger", "score", "monorepo"]
+classifiers = [
+	"Development Status :: 3 - Alpha",
+	"Environment :: Console",
+	"Intended Audience :: Developers",
+	"Programming Language :: Python :: 3",
+	"Programming Language :: Python :: 3.12",
+	"Programming Language :: Python :: 3.13",
+	"Topic :: Software Development :: Code Generators",
+]
 dependencies = [
 	"jinja2>=3.1,<4",
-	"pydantic==2.14.1",
+	"pydantic>=2.11,<3",
 	"pyyaml>=6.0,<7",
 	"questionary>=2.1,<3",
 ]
 
+[project.urls]
+Homepage = "https://github.com/dfoshidero/plinth"
+Issues = "https://github.com/dfoshidero/plinth/issues"
+
 [project.scripts]
-scaffold = "templater.cli:main"
+plinth = "plinth.cli:main"
 
 [dependency-groups]
 dev = [
@@ -20,11 +38,14 @@ dev = [
 ]
 
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling>=1.27"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["templater"]
+packages = ["plinth"]
+
+[tool.hatch.build.targets.sdist]
+include = ["plinth", "tests", "examples", "README.md", "LICENSE"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -32,3 +53,4 @@ testpaths = ["tests"]
 [tool.ruff]
 line-length = 100
 target-version = "py312"
+extend-exclude = ["plinth/blueprints"]

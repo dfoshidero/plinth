@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+# Create a local k3d cluster, install Argo CD and point it at this repository.
+# Needs: docker, k3d, kubectl, helm. Push this repo and the app repos first.
+set -euo pipefail
+
+CLUSTER="${CLUSTER:-{{ project.name }}}"
+ARGO_CD_CHART_VERSION="{{ defaults.ARGO_CD_CHART_VERSION }}"
+cd "$(dirname "$0")/.."
+
+for tool in docker k3d kubectl helm; do
+  command -v "$tool" >/dev/null || { echo "missing required tool: $tool" >&2; exit 1; }
+done
+
+k3d cluster list "$CLUSTER" >/dev/null 2>&1 || k3d cluster create "$CLUSTER" --wait
+helm repo add argo https://argoproj.github.io/argo-helm --force-update >/dev/null
+helm upgrade --install argocd argo/argo-cd --version "$ARGO_CD_CHART_VERSION" \
+  --namespace argocd --create-namespace --wait
+kubectl apply -n argocd -f bootstrap/root.yaml
+
+echo "Argo CD is running. Initial admin password:"
+kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d
+echo
+echo "Open the UI: kubectl -n argocd port-forward svc/argocd-server 8080:443, then https://localhost:8080"
